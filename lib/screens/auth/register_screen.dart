@@ -1,11 +1,9 @@
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../theme.dart';
-import '../../widgets/zynco_button.dart';
+import '../../main.dart';
 import '../../providers/auth_provider.dart';
-import '../../services/supabase_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -13,33 +11,26 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final _email = TextEditingController();
-  final _password = TextEditingController();
-  final _name = TextEditingController();
-  String _role = 'customer';
+  final _nameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
   bool _loading = false;
   bool _obscure = true;
-  String? _error;
+  String _role = 'customer';
 
-  Future<void> _signUp() async {
-    if (_name.text.trim().isEmpty || _email.text.trim().isEmpty || _password.text.isEmpty) {
-      setState(() => _error = 'Please fill all fields');
+  @override
+  void dispose() { _nameCtrl.dispose(); _emailCtrl.dispose(); _passCtrl.dispose(); super.dispose(); }
+
+  Future<void> _register() async {
+    if (_nameCtrl.text.trim().isEmpty || _emailCtrl.text.trim().isEmpty || _passCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields'), backgroundColor: ZyncoColors.error));
       return;
     }
-    setState(() { _loading = true; _error = null; });
-    try {
-      final res = await SupabaseService.signUp(_email.text.trim(), _password.text);
-      final uid = res.user!.id;
-      await SupabaseService.createUser(uid, _email.text.trim(), _name.text.trim(), _role);
-      if (!mounted) return;
-      final auth = context.read<AuthProvider>();
-      await auth.loadProfile();
-      if (!mounted) return;
-      context.go(_role == 'provider' ? '/dashboard' : '/map');
-    } on AuthException catch (e) {
-      setState(() { _error = e.message; _loading = false; });
-    } catch (e) {
-      setState(() { _error = 'Registration failed. Please try again.'; _loading = false; });
+    setState(() => _loading = true);
+    final err = await context.read<AuthProvider>().signUp(_emailCtrl.text.trim(), _passCtrl.text, _nameCtrl.text.trim(), _role);
+    setState(() => _loading = false);
+    if (err != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err), backgroundColor: ZyncoColors.error));
     }
   }
 
@@ -47,61 +38,75 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: ZyncoColors.background,
-      appBar: AppBar(title: const Text('Create Account'), leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.go('/login'))),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        leading: IconButton(icon: const Icon(Icons.arrow_back_ios), onPressed: () => context.go('/login')),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.all(24),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 24),
-              // Role selector
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: ZyncoColors.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: ZyncoColors.border)),
-                child: Row(
-                  children: [
-                    _roleTab('Customer', 'customer', Icons.person_outline),
-                    _roleTab('Provider', 'provider', Icons.business_center_outlined),
-                  ],
-                ),
-              ),
+              const Text('Create Account', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white)),
               const SizedBox(height: 8),
-              Text(
-                _role == 'customer' ? 'Find and book local services' : 'Offer your services to customers',
-                style: const TextStyle(color: ZyncoColors.textSecondary, fontSize: 13),
-                textAlign: TextAlign.center,
+              const Text('Join Zynco today', style: TextStyle(color: ZyncoColors.textSecondary)),
+              const SizedBox(height: 32),
+              // Role selector
+              const Text('I am a...', style: TextStyle(color: ZyncoColors.textSecondary, fontSize: 14)),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  _RoleCard(label: 'Customer', subtitle: 'Find services', icon: Icons.search, selected: _role == 'customer',
+                    onTap: () => setState(() => _role = 'customer')),
+                  const SizedBox(width: 12),
+                  _RoleCard(label: 'Provider', subtitle: 'Offer services', icon: Icons.work_outline, selected: _role == 'provider',
+                    onTap: () => setState(() => _role = 'provider')),
+                ],
               ),
               const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(color: ZyncoColors.surface, borderRadius: BorderRadius.circular(20), border: Border.all(color: ZyncoColors.border)),
-                child: Column(
-                  children: [
-                    TextField(controller: _name, decoration: const InputDecoration(labelText: 'Display Name', prefixIcon: Icon(Icons.badge_outlined, color: ZyncoColors.textSecondary))),
-                    const SizedBox(height: 16),
-                    TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined, color: ZyncoColors.textSecondary))),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _password,
-                      obscureText: _obscure,
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        prefixIcon: const Icon(Icons.lock_outlined, color: ZyncoColors.textSecondary),
-                        suffixIcon: IconButton(icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: ZyncoColors.textSecondary), onPressed: () => setState(() => _obscure = !_obscure)),
-                      ),
-                    ),
-                    if (_error != null) ...[const SizedBox(height: 12), Text(_error!, style: const TextStyle(color: ZyncoColors.error, fontSize: 13))],
-                    const SizedBox(height: 24),
-                    ZyncoGradientButton(label: 'Create Account', onPressed: _signUp, loading: _loading),
-                  ],
+              TextField(controller: _nameCtrl,
+                decoration: const InputDecoration(labelText: 'Full Name', prefixIcon: Icon(Icons.person_outline))),
+              const SizedBox(height: 16),
+              TextField(controller: _emailCtrl, keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined))),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _passCtrl, obscureText: _obscure,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                  ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(gradient: ZyncoColors.gradient, borderRadius: BorderRadius.circular(12)),
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent, shadowColor: Colors.transparent,
+                    minimumSize: const Size(double.infinity, 52),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: _loading ? null : _register,
+                  child: _loading
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text('Create Account', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+                ),
+              ),
+              const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Text('Already have an account? ', style: TextStyle(color: ZyncoColors.textSecondary)),
-                  GestureDetector(onTap: () => context.go('/login'), child: const Text('Sign in', style: TextStyle(color: ZyncoColors.primary, fontWeight: FontWeight.w600))),
+                  GestureDetector(
+                    onTap: () => context.go('/login'),
+                    child: const Text('Sign In', style: TextStyle(color: ZyncoColors.primary, fontWeight: FontWeight.w600)),
+                  ),
                 ],
               ),
             ],
@@ -110,29 +115,37 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
     );
   }
+}
 
-  Widget _roleTab(String label, String value, IconData icon) {
-    final selected = _role == value;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _role = value),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            gradient: selected ? ZyncoColors.gradient : null,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 18, color: selected ? Colors.white : ZyncoColors.textSecondary),
-              const SizedBox(width: 6),
-              Text(label, style: TextStyle(color: selected ? Colors.white : ZyncoColors.textSecondary, fontWeight: selected ? FontWeight.w600 : FontWeight.normal)),
-            ],
-          ),
+class _RoleCard extends StatelessWidget {
+  final String label, subtitle;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+  const _RoleCard({required this.label, required this.subtitle, required this.icon, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: selected ? ZyncoColors.gradient : null,
+          color: selected ? null : ZyncoColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: selected ? Colors.transparent : ZyncoColors.border),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 28, color: Colors.white),
+            const SizedBox(height: 8),
+            Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
 }

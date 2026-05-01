@@ -1,9 +1,11 @@
+
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
-import '../../theme.dart';
-import '../../services/supabase_service.dart';
-import '../../widgets/zynco_avatar.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../main.dart';
+import '../../models/app_models.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -11,33 +13,41 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  List<Map<String, dynamic>> _providers = [];
+  final _mapCtrl = MapController();
+  List<ProviderModel> _providers = [];
+  ProviderModel? _selected;
+  LatLng _center = const LatLng(51.5074, -0.1278);
   bool _loading = true;
-  String? _selectedCategory;
-  final _categories = ['All', 'Beauty', 'Cleaning', 'Plumbing', 'Electrical', 'Tutoring', 'Fitness', 'Other'];
+  String? _filterCategory;
 
   @override
-  void initState() {
-    super.initState();
-    _load();
-  }
+  void initState() { super.initState(); _loadProviders(); }
 
-  Future<void> _load() async {
-    final data = await SupabaseService.getProviders(category: _selectedCategory == 'All' ? null : _selectedCategory);
-    if (mounted) setState(() { _providers = data; _loading = false; });
+  Future<void> _loadProviders() async {
+    try {
+      final res = await Supabase.instance.client
+        .from('providers').select().eq('is_hidden', false).not('lat', 'is', null);
+      setState(() {
+        _providers = (res as List).map((e) => ProviderModel.fromJson(e)).toList();
+        _loading = false;
+      });
+    } catch (_) { setState(() => _loading = false); }
   }
 
   Future<void> _locateMe() async {
+    final perm = await Geolocator.checkPermission();
+    if (perm == LocationPermission.denied) await Geolocator.requestPermission();
     try {
-      final perm = await Geolocator.requestPermission();
-      if (perm == LocationPermission.denied) return;
-      await Geolocator.getCurrentPosition();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Location updated!'), backgroundColor: ZyncoColors.success));
-    } catch (e) {
-      debugPrint('Location error: $e');
-    }
+      final pos = await Geolocator.getCurrentPosition();
+      final ll = LatLng(pos.latitude, pos.longitude);
+      _mapCtrl.move(ll, 14);
+      setState(() => _center = ll);
+    } catch (_) {}
   }
+
+  List<ProviderModel> get _filtered => _filterCategory == null
+    ? _providers
+    : _providers.where((p) => p.categories.contains(_filterCategory)).toList();
 
   @override
   Widget build(BuildContext context) {
@@ -45,175 +55,124 @@ class _MapScreenState extends State<MapScreen> {
       backgroundColor: ZyncoColors.background,
       body: Stack(
         children: [
-          // Neon grid background (map placeholder — add Google Maps with API key)
-          Container(
-            color: const Color(0xFF0A0A15),
-            child: CustomPaint(painter: _GridPainter(), size: Size.infinite),
-          ),
-          // Gradient overlay at bottom
-          Positioned(
-            bottom: 0, left: 0, right: 0, height: 80,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.transparent, ZyncoColors.background],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-              ),
-            ),
-          ),
-          // Top UI
-          Positioned(
-            top: 0, left: 0, right: 0,
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    // Search bar
-                    GestureDetector(
-                      onTap: () => context.go('/explore'),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: ZyncoColors.surface.withOpacity(0.95),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: ZyncoColors.primary.withOpacity(0.3)),
-                          boxShadow: [BoxShadow(color: ZyncoColors.primary.withOpacity(0.15), blurRadius: 12)],
-                        ),
-                        child: Row(children: [
-                          const Icon(Icons.search, color: ZyncoColors.textSecondary),
-                          const SizedBox(width: 8),
-                          const Expanded(child: Text('Search providers...', style: TextStyle(color: ZyncoColors.textSecondary))),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(color: ZyncoColors.primary.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
-                            child: Text('${_providers.length} nearby', style: const TextStyle(color: ZyncoColors.primary, fontSize: 11, fontWeight: FontWeight.w600)),
-                          ),
-                        ]),
+          FlutterMap(
+            mapController: _mapCtrl,
+            options: MapOptions(initialCenter: _center, initialZoom: 12, onTap: (_, __) => setState(() => _selected = null)),
+            children: [
+              TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'),
+              MarkerLayer(
+                markers: _filtered.map((p) => Marker(
+                  point: LatLng(p.lat!, p.lng!),
+                  width: 40, height: 40,
+                  child: GestureDetector(
+                    onTap: () => setState(() => _selected = p),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: ZyncoColors.gradient,
+                        shape: BoxShape.circle,
+                        boxShadow: [BoxShadow(color: ZyncoColors.primary.withOpacity(0.5), blurRadius: 8)],
                       ),
+                      child: const Icon(Icons.person, color: Colors.white, size: 20),
                     ),
-                    const SizedBox(height: 10),
-                    // Category chips
-                    SizedBox(
-                      height: 32,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _categories.length,
-                        itemBuilder: (_, i) {
-                          final cat = _categories[i];
-                          final sel = (_selectedCategory ?? 'All') == cat;
-                          return GestureDetector(
-                            onTap: () { setState(() => _selectedCategory = cat == 'All' ? null : cat); _load(); },
-                            child: Container(
-                              margin: const EdgeInsets.only(right: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                              decoration: BoxDecoration(
-                                gradient: sel ? ZyncoColors.gradient : null,
-                                color: sel ? null : ZyncoColors.surface.withOpacity(0.9),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: sel ? Colors.transparent : ZyncoColors.border),
-                              ),
-                              child: Text(cat, style: TextStyle(color: sel ? Colors.white : ZyncoColors.textSecondary, fontSize: 12, fontWeight: sel ? FontWeight.w600 : FontWeight.normal)),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          // Provider markers (simulated positions)
-          if (!_loading)
-            ..._providers.asMap().entries.where((e) => e.value['lat'] != null).map((e) {
-              final size = MediaQuery.of(context).size;
-              final x = 60.0 + (e.key * 97 + 40) % (size.width - 80);
-              final y = 180.0 + (e.key * 113 + 60) % (size.height - 320);
-              return Positioned(
-                left: x, top: y,
-                child: GestureDetector(
-                  onTap: () => _showProviderPopup(context, e.value),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: ZyncoColors.gradient,
-                      boxShadow: [BoxShadow(color: ZyncoColors.primary.withOpacity(0.5), blurRadius: 8)],
-                    ),
-                    padding: const EdgeInsets.all(2),
-                    child: ZyncoAvatar(url: e.value['avatar_url'], name: e.value['display_name'] ?? '?', size: 38),
                   ),
-                ),
-              );
-            }),
-          // Locate Me button — bottom: 96px above nav bar per TZ
-          Positioned(
-            bottom: 96,
-            right: 16,
-            child: FloatingActionButton(
-              heroTag: 'locate',
-              onPressed: _locateMe,
-              backgroundColor: ZyncoColors.surface,
-              elevation: 4,
-              child: const Icon(Icons.my_location, color: ZyncoColors.primary),
+                )).toList(),
+              ),
+            ],
+          ),
+          // Top bar
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(color: ZyncoColors.surface, borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: ZyncoColors.border)),
+                      child: const Text('Zynco', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: ZyncoColors.surface, borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: ZyncoColors.border)),
+                    child: Text('${_filtered.length} nearby', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                  ),
+                ],
+              ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  void _showProviderPopup(BuildContext context, Map<String, dynamic> p) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: ZyncoColors.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Row(
-          children: [
-            ZyncoAvatar(url: p['avatar_url'], name: p['display_name'] ?? '?', size: 56, showRing: true),
-            const SizedBox(width: 16),
-            Expanded(child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(p['display_name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                if (p['city'] != null) Text(p['city'], style: const TextStyle(color: ZyncoColors.textSecondary)),
-                Row(children: [
-                  const Icon(Icons.star, color: Colors.amber, size: 14),
-                  Text(' ${(p['rating'] ?? 0).toStringAsFixed(1)}', style: const TextStyle(fontSize: 12, color: ZyncoColors.textSecondary)),
-                ]),
-              ],
-            )),
-            ElevatedButton(
-              onPressed: () { Navigator.pop(context); context.push('/provider/${p['id']}'); },
-              child: const Text('View'),
+          // Locate me button - bottom 96px
+          Positioned(
+            right: 16, bottom: 96,
+            child: GestureDetector(
+              onTap: _locateMe,
+              child: Container(
+                width: 48, height: 48,
+                decoration: BoxDecoration(
+                  gradient: ZyncoColors.gradient,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [BoxShadow(color: ZyncoColors.primary.withOpacity(0.4), blurRadius: 12)],
+                ),
+                child: const Icon(Icons.my_location, color: Colors.white),
+              ),
             ),
-          ],
-        ),
+          ),
+          // Provider popup
+          if (_selected != null)
+            Positioned(
+              left: 16, right: 16, bottom: 16,
+              child: _ProviderPopup(provider: _selected!, onClose: () => setState(() => _selected = null)),
+            ),
+        ],
       ),
     );
   }
 }
 
-class _GridPainter extends CustomPainter {
+class _ProviderPopup extends StatelessWidget {
+  final ProviderModel provider;
+  final VoidCallback onClose;
+  const _ProviderPopup({required this.provider, required this.onClose});
+
   @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = const Color(0xFF7C3AED).withOpacity(0.07)..strokeWidth = 0.8;
-    for (double x = 0; x < size.width; x += 44) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (double y = 0; y < size.height; y += 44) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-    // Radial glow at center
-    final glow = Paint()
-      ..shader = RadialGradient(colors: [const Color(0xFF7C3AED).withOpacity(0.12), Colors.transparent])
-          .createShader(Rect.fromCircle(center: Offset(size.width / 2, size.height / 2), radius: size.width * 0.6));
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), glow);
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: ZyncoColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: ZyncoColors.border),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 28,
+            backgroundColor: ZyncoColors.primary,
+            backgroundImage: provider.avatarUrl != null ? NetworkImage(provider.avatarUrl!) : null,
+            child: provider.avatarUrl == null ? const Icon(Icons.person, color: Colors.white) : null,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(provider.displayName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                if (provider.categories.isNotEmpty)
+                  Text(provider.categories.take(2).join(' · '), style: const TextStyle(color: ZyncoColors.textSecondary, fontSize: 12)),
+                if (provider.rating != null)
+                  Row(children: [
+                    const Icon(Icons.star, color: Colors.amber, size: 14),
+                    Text(' ${provider.rating!.toStringAsFixed(1)}', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                  ]),
+              ],
+            ),
+          ),
+          IconButton(icon: const Icon(Icons.close, color: ZyncoColors.textSecondary), onPressed: onClose),
+        ],
+      ),
+    );
   }
-  @override bool shouldRepaint(_) => false;
 }

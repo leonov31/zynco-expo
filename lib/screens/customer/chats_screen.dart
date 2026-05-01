@@ -1,11 +1,12 @@
+
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:timeago/timeago.dart' as timeago;
-import '../../theme.dart';
-import '../../services/supabase_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../main.dart';
+import '../../models/app_models.dart';
 import '../../providers/auth_provider.dart';
-import '../../widgets/zynco_avatar.dart';
+import '../shared/chat_screen.dart';
 
 class ChatsScreen extends StatefulWidget {
   const ChatsScreen({super.key});
@@ -13,56 +14,60 @@ class ChatsScreen extends StatefulWidget {
 }
 
 class _ChatsScreenState extends State<ChatsScreen> {
-  List<Map<String, dynamic>> _chats = [];
+  List<ChatModel> _chats = [];
   bool _loading = true;
 
-  @override void initState() { super.initState(); _load(); }
+  @override
+  void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
-    final role = context.read<AuthProvider>().role ?? 'customer';
-    final data = await SupabaseService.getChats(role);
-    if (mounted) setState(() { _chats = data; _loading = false; });
+    final uid = context.read<AuthProvider>().user?.id;
+    if (uid == null) return;
+    try {
+      final res = await Supabase.instance.client.from('chats').select().eq('customer_id', uid).order('last_message_at', ascending: false);
+      setState(() { _chats = (res as List).map((e) => ChatModel.fromJson(e)).toList(); _loading = false; });
+    } catch (_) { setState(() => _loading = false); }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: ZyncoColors.background,
-      appBar: AppBar(title: const Text('Messages')),
+      appBar: AppBar(title: const Text('Messages'), backgroundColor: ZyncoColors.background),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: ZyncoColors.primary))
-          : _chats.isEmpty
-              ? const Center(child: Text('No conversations yet', style: TextStyle(color: ZyncoColors.textSecondary)))
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.builder(
-                    itemCount: _chats.length,
-                    itemBuilder: (_, i) {
-                      final chat = _chats[i];
-                      final other = (chat['providers'] ?? chat['users']) as Map<String, dynamic>? ?? {};
-                      final unread = (chat['unread_customer'] ?? 0) as int;
-                      final lastAt = chat['last_message_at'] != null ? DateTime.tryParse(chat['last_message_at']) : null;
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        leading: ZyncoAvatar(url: other['avatar_url'], name: other['display_name'] ?? '?', size: 48),
-                        title: Text(other['display_name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: Text(chat['last_message'] ?? 'Start a conversation', style: const TextStyle(color: ZyncoColors.textSecondary, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-                          if (lastAt != null) Text(timeago.format(lastAt), style: const TextStyle(color: ZyncoColors.textSecondary, fontSize: 11)),
-                          if (unread > 0) ...[
-                            const SizedBox(height: 4),
-                            Container(
-                              width: 18, height: 18,
-                              decoration: const BoxDecoration(color: ZyncoColors.primary, shape: BoxShape.circle),
-                              child: Center(child: Text('$unread', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
-                            ),
-                          ],
-                        ]),
-                        onTap: () => context.push('/chat/${chat['id']}'),
-                      );
-                    },
+        ? const Center(child: CircularProgressIndicator(color: ZyncoColors.primary))
+        : _chats.isEmpty
+          ? const Center(child: Text('No messages yet', style: TextStyle(color: ZyncoColors.textSecondary)))
+          : ListView.builder(
+              itemCount: _chats.length,
+              itemBuilder: (c, i) {
+                final chat = _chats[i];
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: ZyncoColors.primary,
+                    child: Text((chat.otherUserName ?? 'P')[0], style: const TextStyle(color: Colors.white)),
                   ),
-                ),
+                  title: Text(chat.otherUserName ?? 'Provider', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  subtitle: Text(chat.lastMessage ?? '', style: const TextStyle(color: ZyncoColors.textSecondary),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (chat.lastMessageAt != null)
+                        Text(DateFormat('HH:mm').format(chat.lastMessageAt!), style: const TextStyle(color: ZyncoColors.textSecondary, fontSize: 11)),
+                      if (chat.unreadCustomer > 0)
+                        Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          padding: const EdgeInsets.all(6),
+                          decoration: const BoxDecoration(color: ZyncoColors.primary, shape: BoxShape.circle),
+                          child: Text('${chat.unreadCustomer}', style: const TextStyle(color: Colors.white, fontSize: 11)),
+                        ),
+                    ],
+                  ),
+                  onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => ChatScreen(chatId: chat.id))),
+                );
+              },
+            ),
     );
   }
 }

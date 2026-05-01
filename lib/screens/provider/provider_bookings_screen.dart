@@ -1,8 +1,11 @@
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../theme.dart';
-import '../../services/supabase_service.dart';
-import '../../widgets/zynco_avatar.dart';
+import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../main.dart';
+import '../../models/app_models.dart';
+import '../../providers/auth_provider.dart';
 
 class ProviderBookingsScreen extends StatefulWidget {
   const ProviderBookingsScreen({super.key});
@@ -10,10 +13,28 @@ class ProviderBookingsScreen extends StatefulWidget {
 }
 
 class _ProviderBookingsScreenState extends State<ProviderBookingsScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabs;
+  late final TabController _tab = TabController(length: 4, vsync: this);
+  List<BookingModel> _bookings = [];
+  bool _loading = true;
 
-  @override void initState() { super.initState(); _tabs = TabController(length: 4, vsync: this); }
-  @override void dispose() { _tabs.dispose(); super.dispose(); }
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    final prov = context.read<AuthProvider>().providerProfile;
+    if (prov == null) return;
+    try {
+      final res = await Supabase.instance.client.from('bookings').select().eq('provider_id', prov.id).order('scheduled_for', ascending: false);
+      setState(() { _bookings = (res as List).map((e) => BookingModel.fromJson(e)).toList(); _loading = false; });
+    } catch (_) { setState(() => _loading = false); }
+  }
+
+  Future<void> _updateStatus(String id, String status) async {
+    await Supabase.instance.client.from('bookings').update({'status': status}).eq('id', id);
+    _load();
+  }
+
+  List<BookingModel> _filter(String? s) => s == null ? _bookings : _bookings.where((b) => b.status == s).toList();
 
   @override
   Widget build(BuildContext context) {
@@ -21,95 +42,76 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen> with Si
       backgroundColor: ZyncoColors.background,
       appBar: AppBar(
         title: const Text('Bookings'),
-        bottom: TabBar(controller: _tabs, indicatorColor: ZyncoColors.primary, labelColor: ZyncoColors.primary, unselectedLabelColor: ZyncoColors.textSecondary,
-          tabs: const [Tab(text: 'All'), Tab(text: 'Pending'), Tab(text: 'Confirmed'), Tab(text: 'Done')]),
+        backgroundColor: ZyncoColors.background,
+        bottom: TabBar(
+          controller: _tab,
+          labelColor: ZyncoColors.primary,
+          unselectedLabelColor: ZyncoColors.textSecondary,
+          indicatorColor: ZyncoColors.primary,
+          tabs: const [Tab(text: 'All'), Tab(text: 'Pending'), Tab(text: 'Confirmed'), Tab(text: 'Done')],
+        ),
       ),
-      body: TabBarView(
-        controller: _tabs,
-        children: [null, 'pending', 'confirmed', 'completed'].map((s) => _ProviderBookingsList(status: s)).toList(),
-      ),
+      body: _loading ? const Center(child: CircularProgressIndicator(color: ZyncoColors.primary))
+        : TabBarView(
+            controller: _tab,
+            children: [
+              _BookingList(bookings: _filter(null), onUpdate: _updateStatus),
+              _BookingList(bookings: _filter('pending'), onUpdate: _updateStatus),
+              _BookingList(bookings: _filter('confirmed'), onUpdate: _updateStatus),
+              _BookingList(bookings: _filter('completed'), onUpdate: _updateStatus),
+            ],
+          ),
     );
   }
 }
 
-class _ProviderBookingsList extends StatefulWidget {
-  final String? status;
-  const _ProviderBookingsList({this.status});
-  @override State<_ProviderBookingsList> createState() => _ProviderBookingsListState();
-}
-
-class _ProviderBookingsListState extends State<_ProviderBookingsList> {
-  List<Map<String, dynamic>> _bookings = [];
-  bool _loading = true;
-
-  @override void initState() { super.initState(); _load(); }
-
-  Future<void> _load() async {
-    final data = await SupabaseService.getBookings(role: 'provider', status: widget.status);
-    if (mounted) setState(() { _bookings = data; _loading = false; });
-  }
-
+class _BookingList extends StatelessWidget {
+  final List<BookingModel> bookings;
+  final Function(String, String) onUpdate;
+  const _BookingList({required this.bookings, required this.onUpdate});
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator(color: ZyncoColors.primary));
-    if (_bookings.isEmpty) return const Center(child: Text('No bookings', style: TextStyle(color: ZyncoColors.textSecondary)));
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _bookings.length,
-        itemBuilder: (_, i) {
-          final b = _bookings[i];
-          final user = b['users'] as Map<String, dynamic>? ?? {};
-          final date = DateTime.tryParse(b['scheduled_for'] ?? '') ?? DateTime.now();
-          final status = b['status'] as String;
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    if (bookings.isEmpty) return const Center(child: Text('No bookings', style: TextStyle(color: ZyncoColors.textSecondary)));
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: bookings.length,
+      itemBuilder: (c, i) {
+        final b = bookings[i];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: ZyncoColors.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: ZyncoColors.border)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(b.customerName ?? 'Customer', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              Text(DateFormat('MMM d, yyyy · HH:mm').format(b.scheduledFor), style: const TextStyle(color: ZyncoColors.textSecondary, fontSize: 13)),
+              if (b.note != null) Text(b.note!, style: const TextStyle(color: ZyncoColors.textSecondary, fontSize: 13)),
+              if (b.status == 'pending') ...[
+                const SizedBox(height: 12),
                 Row(children: [
-                  ZyncoAvatar(url: user['avatar_url'], name: user['display_name'] ?? '?', size: 40),
-                  const SizedBox(width: 12),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(user['display_name'] ?? 'Customer', style: const TextStyle(fontWeight: FontWeight.w600)),
-                    Text(DateFormat('MMM d, yyyy • HH:mm').format(date), style: const TextStyle(color: ZyncoColors.textSecondary, fontSize: 12)),
-                  ])),
-                  _StatusChip(status: status),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: ZyncoColors.success, minimumSize: const Size(0, 38), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                      onPressed: () => onUpdate(b.id, 'confirmed'),
+                      child: const Text('Confirm'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(side: const BorderSide(color: ZyncoColors.error), minimumSize: const Size(0, 38), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                      onPressed: () => onUpdate(b.id, 'cancelled'),
+                      child: const Text('Cancel', style: TextStyle(color: ZyncoColors.error)),
+                    ),
+                  ),
                 ]),
-                if (b['note'] != null && b['note'].isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: ZyncoColors.surface2, borderRadius: BorderRadius.circular(8)),
-                    child: Text(b['note'], style: const TextStyle(color: ZyncoColors.textSecondary, fontSize: 13))),
-                ],
-                if (status == 'pending') ...[
-                  const SizedBox(height: 12),
-                  Row(children: [
-                    Expanded(child: ElevatedButton(onPressed: () async { await SupabaseService.updateBookingStatus(b['id'], 'confirmed'); _load(); }, style: ElevatedButton.styleFrom(backgroundColor: ZyncoColors.success), child: const Text('Confirm'))),
-                    const SizedBox(width: 8),
-                    Expanded(child: OutlinedButton(onPressed: () async { await SupabaseService.updateBookingStatus(b['id'], 'cancelled'); _load(); }, style: OutlinedButton.styleFrom(side: const BorderSide(color: ZyncoColors.error), foregroundColor: ZyncoColors.error), child: const Text('Cancel'))),
-                  ]),
-                ],
-              ]),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  final String status;
-  const _StatusChip({required this.status});
-  @override
-  Widget build(BuildContext context) {
-    final colors = {'pending': Colors.orange, 'confirmed': ZyncoColors.success, 'cancelled': ZyncoColors.error, 'completed': ZyncoColors.primary};
-    final color = colors[status] ?? ZyncoColors.textSecondary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
-      child: Text(status.toUpperCase(), style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold)),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }

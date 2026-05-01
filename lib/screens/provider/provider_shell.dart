@@ -1,49 +1,43 @@
-import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import '../../theme.dart';
 
-class ProviderShell extends StatelessWidget {
+import 'package:flutter/material.dart';
+import '../../main.dart';
+import 'dashboard_screen.dart';
+import 'provider_bookings_screen.dart';
+import 'provider_chats_screen.dart';
+import 'plan_screen.dart';
+import 'provider_profile_screen.dart';
+
+class ProviderShell extends StatefulWidget {
   final Widget child;
   const ProviderShell({super.key, required this.child});
+  @override State<ProviderShell> createState() => _ProviderShellState();
+}
 
-  int _selectedIndex(BuildContext context) {
-    final loc = GoRouterState.of(context).matchedLocation;
-    if (loc.startsWith('/dashboard')) return 0;
-    if (loc.startsWith('/provider-bookings')) return 1;
-    if (loc.startsWith('/provider-chats')) return 2;
-    if (loc.startsWith('/plan')) return 3;
-    if (loc.startsWith('/provider-me')) return 4;
-    return 0;
-  }
+class _ProviderShellState extends State<ProviderShell> {
+  int _idx = 0;
+  static const _screens = [DashboardScreen(), ProviderBookingsScreen(), ProviderChatsScreen(), PlanScreen(), ProviderProfileScreen()];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: child,
+      body: _screens[_idx],
       bottomNavigationBar: Container(
-        decoration: BoxDecoration(color: ZyncoColors.surface, border: const Border(top: BorderSide(color: ZyncoColors.border))),
-        child: SafeArea(
-          child: NavigationBar(
-            backgroundColor: Colors.transparent,
-            selectedIndex: _selectedIndex(context),
-            indicatorColor: ZyncoColors.primary.withOpacity(0.15),
-            destinations: const [
-              NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard, color: ZyncoColors.primary), label: 'Home'),
-              NavigationDestination(icon: Icon(Icons.calendar_today_outlined), selectedIcon: Icon(Icons.calendar_today, color: ZyncoColors.primary), label: 'Bookings'),
-              NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble, color: ZyncoColors.primary), label: 'Chats'),
-              NavigationDestination(icon: Icon(Icons.star_outline), selectedIcon: Icon(Icons.star, color: ZyncoColors.primary), label: 'Plan'),
-              NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person, color: ZyncoColors.primary), label: 'Me'),
-            ],
-            onDestinationSelected: (i) {
-              switch (i) {
-                case 0: context.go('/dashboard'); break;
-                case 1: context.go('/provider-bookings'); break;
-                case 2: context.go('/provider-chats'); break;
-                case 3: context.go('/plan'); break;
-                case 4: context.go('/provider-me'); break;
-              }
-            },
-          ),
+        decoration: const BoxDecoration(color: ZyncoColors.surface, border: Border(top: BorderSide(color: ZyncoColors.border))),
+        child: BottomNavigationBar(
+          currentIndex: _idx,
+          onTap: (i) => setState(() => _idx = i),
+          backgroundColor: ZyncoColors.surface,
+          selectedItemColor: ZyncoColors.primary,
+          unselectedItemColor: ZyncoColors.textSecondary,
+          type: BottomNavigationBarType.fixed,
+          elevation: 0,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), activeIcon: Icon(Icons.dashboard), label: 'Home'),
+            BottomNavigationBarItem(icon: Icon(Icons.calendar_today_outlined), label: 'Bookings'),
+            BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Chats'),
+            BottomNavigationBarItem(icon: Icon(Icons.star_outline), label: 'Plan'),
+            BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Me'),
+          ],
         ),
       ),
     );

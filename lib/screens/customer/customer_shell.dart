@@ -1,55 +1,54 @@
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../theme.dart';
+import '../../main.dart';
+import 'map_screen.dart';
+import 'explore_screen.dart';
+import 'saved_screen.dart';
+import 'bookings_screen.dart';
+import 'chats_screen.dart';
+import 'profile_screen.dart';
 
-class CustomerShell extends StatelessWidget {
+class CustomerShell extends StatefulWidget {
   final Widget child;
   const CustomerShell({super.key, required this.child});
+  @override State<CustomerShell> createState() => _CustomerShellState();
+}
 
-  int _selectedIndex(BuildContext context) {
-    final loc = GoRouterState.of(context).matchedLocation;
-    if (loc.startsWith('/map')) return 0;
-    if (loc.startsWith('/explore')) return 1;
-    if (loc.startsWith('/saved')) return 2;
-    if (loc.startsWith('/bookings')) return 3;
-    if (loc.startsWith('/chats')) return 4;
-    if (loc.startsWith('/me')) return 5;
-    return 0;
-  }
+class _CustomerShellState extends State<CustomerShell> {
+  int _idx = 0;
+  static const _screens = [MapScreen(), ExploreScreen(), SavedScreen(), BookingsScreen(), ChatsScreen(), CustomerProfileScreen()];
+  static const _routes = ['/customer', '/customer/explore', '/customer/saved', '/customer/bookings', '/customer/chats', '/customer/me'];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: child,
+      body: _screens[_idx],
       bottomNavigationBar: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: ZyncoColors.surface,
-          border: const Border(top: BorderSide(color: ZyncoColors.border)),
+          border: Border(top: BorderSide(color: ZyncoColors.border)),
         ),
-        child: SafeArea(
-          child: NavigationBar(
-            backgroundColor: Colors.transparent,
-            selectedIndex: _selectedIndex(context),
-            indicatorColor: ZyncoColors.primary.withOpacity(0.15),
-            destinations: const [
-              NavigationDestination(icon: Icon(Icons.map_outlined), selectedIcon: Icon(Icons.map, color: ZyncoColors.primary), label: 'Map'),
-              NavigationDestination(icon: Icon(Icons.search_outlined), selectedIcon: Icon(Icons.search, color: ZyncoColors.primary), label: 'Explore'),
-              NavigationDestination(icon: Icon(Icons.favorite_outline), selectedIcon: Icon(Icons.favorite, color: ZyncoColors.primary), label: 'Saved'),
-              NavigationDestination(icon: Icon(Icons.calendar_today_outlined), selectedIcon: Icon(Icons.calendar_today, color: ZyncoColors.primary), label: 'Bookings'),
-              NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble, color: ZyncoColors.primary), label: 'Chats'),
-              NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person, color: ZyncoColors.primary), label: 'Me'),
-            ],
-            onDestinationSelected: (i) {
-              switch (i) {
-                case 0: context.go('/map'); break;
-                case 1: context.go('/explore'); break;
-                case 2: context.go('/saved'); break;
-                case 3: context.go('/bookings'); break;
-                case 4: context.go('/chats'); break;
-                case 5: context.go('/me'); break;
-              }
-            },
-          ),
+        child: BottomNavigationBar(
+          currentIndex: _idx,
+          onTap: (i) => setState(() => _idx = i),
+          backgroundColor: ZyncoColors.surface,
+          selectedItemColor: ZyncoColors.primary,
+          unselectedItemColor: ZyncoColors.textSecondary,
+          type: BottomNavigationBarType.fixed,
+          showSelectedLabels: true,
+          showUnselectedLabels: true,
+          selectedFontSize: 11,
+          unselectedFontSize: 11,
+          elevation: 0,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.map_outlined), activeIcon: Icon(Icons.map), label: 'Map'),
+            BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Explore'),
+            BottomNavigationBarItem(icon: Icon(Icons.favorite_outline), activeIcon: Icon(Icons.favorite), label: 'Saved'),
+            BottomNavigationBarItem(icon: Icon(Icons.calendar_today_outlined), label: 'Bookings'),
+            BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Chats'),
+            BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Me'),
+          ],
         ),
       ),
     );

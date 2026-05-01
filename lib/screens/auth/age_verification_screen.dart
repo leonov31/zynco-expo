@@ -1,35 +1,13 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../../theme.dart';
-import '../../widgets/zynco_button.dart';
+import 'package:provider/provider.dart';
+import '../../main.dart';
+import '../../providers/auth_provider.dart';
 
 class AgeVerificationScreen extends StatelessWidget {
   const AgeVerificationScreen({super.key});
-
-  Future<void> _confirmAge(BuildContext context) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('age_confirmed', true);
-    if (context.mounted) context.go('/login');
-  }
-
-  void _denyAge(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: ZyncoColors.surface,
-        title: const Text('Access Denied', style: TextStyle(color: Colors.white)),
-        content: const Text('You must be 18 or older to use Zynco.', style: TextStyle(color: ZyncoColors.textSecondary)),
-        actions: [
-          TextButton(
-            onPressed: () => SystemNavigator.pop(),
-            child: const Text('Exit App', style: TextStyle(color: ZyncoColors.error)),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,59 +15,98 @@ class AgeVerificationScreen extends StatelessWidget {
       backgroundColor: ZyncoColors.background,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
+          padding: const EdgeInsets.all(32),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Spacer(),
-              // Neon logo glow
+              const Spacer(flex: 2),
+              // Logo
               Container(
-                width: 120, height: 120,
+                width: 100, height: 100,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: RadialGradient(colors: [ZyncoColors.primary.withOpacity(0.3), Colors.transparent]),
+                  gradient: ZyncoColors.gradient,
+                  boxShadow: [BoxShadow(color: ZyncoColors.primary.withOpacity(0.4), blurRadius: 30, spreadRadius: 5)],
                 ),
-                child: Center(
-                  child: ShaderMask(
-                    shaderCallback: (b) => ZyncoColors.gradient.createShader(b),
-                    child: const Icon(Icons.location_on, size: 80, color: Colors.white),
-                  ),
-                ),
+                child: const Icon(Icons.location_on, size: 50, color: Colors.white),
               ),
               const SizedBox(height: 24),
+              // App name
               ShaderMask(
                 shaderCallback: (b) => ZyncoColors.gradient.createShader(b),
-                child: const Text('Zynco', style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white)),
+                child: const Text('Zynco', style: TextStyle(fontSize: 42, fontWeight: FontWeight.w800, color: Colors.white)),
               ),
               const SizedBox(height: 8),
-              const Text('Local services, near you', style: TextStyle(color: ZyncoColors.textSecondary, fontSize: 14)),
-              const Spacer(),
-              // Glass card
+              const Text('Connect with local services', style: TextStyle(color: ZyncoColors.textSecondary, fontSize: 16)),
+              const Spacer(flex: 2),
+              // Age question
               Container(
-                padding: const EdgeInsets.all(28),
+                padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: ZyncoColors.surface.withOpacity(0.8),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: ZyncoColors.primary.withOpacity(0.3)),
-                  boxShadow: [BoxShadow(color: ZyncoColors.primary.withOpacity(0.1), blurRadius: 20)],
+                  color: ZyncoColors.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: ZyncoColors.border),
                 ),
                 child: Column(
                   children: [
-                    const Icon(Icons.verified_user_outlined, color: ZyncoColors.primary, size: 40),
-                    const SizedBox(height: 16),
-                    const Text('Are you 18 or older?', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center),
-                    const SizedBox(height: 8),
-                    const Text('This app is intended for users 18 years and older only.', style: TextStyle(color: ZyncoColors.textSecondary, fontSize: 14), textAlign: TextAlign.center),
-                    const SizedBox(height: 28),
-                    ZyncoGradientButton(label: 'Yes, I am 18+', onPressed: () => _confirmAge(context)),
+                    const Text('Are you 18 or older?',
+                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Colors.white),
+                      textAlign: TextAlign.center),
                     const SizedBox(height: 12),
-                    ZyncoButton(label: 'No', onPressed: () => _denyAge(context), outlined: true, width: double.infinity),
+                    const Text('This app is intended only for users aged 18 and above.',
+                      style: TextStyle(color: ZyncoColors.textSecondary, fontSize: 14),
+                      textAlign: TextAlign.center),
+                    const SizedBox(height: 28),
+                    // Yes button
+                    Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        gradient: ZyncoColors.gradient,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent, shadowColor: Colors.transparent,
+                          minimumSize: const Size(double.infinity, 52),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () async {
+                          await context.read<AuthProvider>().confirmAge();
+                          if (context.mounted) context.go('/login');
+                        },
+                        child: const Text('Yes, I am 18+',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // No button
+                    OutlinedButton(
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (_) => AlertDialog(
+                            backgroundColor: ZyncoColors.surface,
+                            title: const Text('Access Denied', style: TextStyle(color: Colors.white)),
+                            content: const Text('You must be 18 or older to use Zynco.',
+                              style: TextStyle(color: ZyncoColors.textSecondary)),
+                            actions: [
+                              TextButton(
+                                onPressed: () => SystemNavigator.pop(),
+                                child: const Text('Close App', style: TextStyle(color: ZyncoColors.error)),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      child: const Text('No'),
+                    ),
                   ],
                 ),
               ),
-              const SizedBox(height: 32),
-              const Text('By continuing you agree to our Terms & Privacy Policy', style: TextStyle(color: ZyncoColors.textSecondary, fontSize: 11), textAlign: TextAlign.center),
-              const SizedBox(height: 24),
+              const Spacer(),
+              const Text('By continuing you agree to our Terms & Privacy Policy',
+                style: TextStyle(color: ZyncoColors.textSecondary, fontSize: 12),
+                textAlign: TextAlign.center),
+              const SizedBox(height: 16),
             ],
           ),
         ),
