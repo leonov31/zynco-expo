@@ -24,6 +24,9 @@ jobs:
           channel: stable
           cache: true
       
+      - name: Generate Android project files
+        run: flutter create --platforms android . --project-name zynco --org com.zynco
+      
       - name: Install dependencies
         run: flutter pub get
       
@@ -49,11 +52,11 @@ jobs:
           channel: stable
           cache: true
       
+      - name: Generate iOS project files
+        run: flutter create --platforms ios . --project-name zynco --org com.zynco
+      
       - name: Install dependencies
         run: flutter pub get
-      
-      - name: Create iOS project files
-        run: flutter create --platforms ios . --project-name zynco
       
       - name: Build iOS (no codesign)
         run: flutter build ios --release --no-codesign --no-tree-shake-icons
