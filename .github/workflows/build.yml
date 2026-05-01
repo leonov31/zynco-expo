@@ -14,14 +14,14 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
-          java-version: '17'
+          distribution: zulu
+          java-version: "17"
       
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'
-          channel: 'stable'
+          flutter-version: "3.22.0"
+          channel: stable
           cache: true
       
       - name: Install dependencies
@@ -45,12 +45,15 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'
-          channel: 'stable'
+          flutter-version: "3.22.0"
+          channel: stable
           cache: true
       
       - name: Install dependencies
         run: flutter pub get
+      
+      - name: Create iOS project files
+        run: flutter create --platforms ios . --project-name zynco
       
       - name: Build iOS (no codesign)
         run: flutter build ios --release --no-codesign --no-tree-shake-icons
@@ -59,11 +62,11 @@ jobs:
         run: |
           mkdir -p Payload
           cp -r build/ios/iphoneos/Runner.app Payload/
-          zip -r zynco.ipa Payload/
+          zip -r zynco-unsigned.ipa Payload/
       
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: zynco-ios-unsigned
-          path: zynco.ipa
+          path: zynco-unsigned.ipa
           retention-days: 30
