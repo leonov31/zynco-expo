@@ -18,25 +18,32 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0'
+          flutter-version: '3.22.0'
           channel: 'stable'
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
 
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build APK (release)
-        run: flutter build apk --release --no-obfuscate
+      - name: Analyze (allow warnings)
+        run: flutter analyze --no-fatal-warnings || true
 
-      - name: Build APK (debug)
+      - name: Build APK debug
         run: flutter build apk --debug
 
-      - name: Upload APK
+      - name: Build APK release
+        run: flutter build apk --release
+
+      - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
           name: zynco-android
           path: |
-            build/app/outputs/flutter-apk/app-release.apk
             build/app/outputs/flutter-apk/app-debug.apk
+            build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
 
   build-ios:
@@ -46,22 +53,22 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0'
+          flutter-version: '3.22.0'
           channel: 'stable'
+          cache: true
 
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build iOS (no signing)
+      - name: Build iOS (unsigned)
         run: flutter build ios --release --no-codesign
 
-      - name: Create IPA (unsigned)
+      - name: Package IPA
         run: |
-          cd build/ios/iphoneos
-          mkdir Payload
-          cp -r Runner.app Payload/
-          zip -r zynco-unsigned.ipa Payload
-          mv zynco-unsigned.ipa ../../../
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r zynco-unsigned.ipa Payload/
+          rm -rf Payload
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
